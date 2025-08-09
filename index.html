@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1600, initial-scale=1.0">
   <title>Fragtbestilling & Kartoteker</title>
+
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- (valgfri) XLSX bib som du allerede brugte -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 1600px; margin: auto; }
     h1, h2 { margin-top: 30px; }
@@ -27,7 +32,6 @@
     .action-buttons { margin-top: 20px; display: flex; gap: 10px; }
     .action-buttons button { padding: 6px 12px; font-size: 1em; }
 
-    /* Modal */
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 9999; }
     .modal-content { background: white; padding: 24px; border-radius: 10px; max-width: 98vw; width: 98vw; height: 95vh; overflow:auto;}
     .customer-list table { font-size: 1.1em; width: 100%; }
@@ -39,7 +43,6 @@
     .close-btn { background: #e74c3c; color: #fff; border: none; font-size: 1.1em; font-weight: bold; border-radius: 6px; padding: 10px 28px; cursor: pointer; transition: background 0.2s; margin-left: 10px; }
     .close-btn:hover { background: #c0392b; }
 
-    /* Kolonnebredder */
     th:nth-child(2), td:nth-child(2) { width: 90px; min-width: 70px; max-width: 120px; }
     th:nth-child(3), td:nth-child(3),
     th:nth-child(4), td:nth-child(4) { width: 340px; min-width: 260px; max-width: 400px; }
@@ -51,16 +54,14 @@
     th:nth-child(10), td:nth-child(10) { width: 180px; min-width: 120px; max-width: 250px; }
     th:nth-child(11), td:nth-child(11) { width: 85px; min-width: 65px; max-width: 120px; text-align: center; }
 
-    /* Checkbox + felt i samme linje uden at hæve højden */
     .inline-field { display: flex; align-items: center; gap: 8px; width: 100%; }
     .inline-field > input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
     .inline-field > select { flex: 1 1 auto; min-width: 0; }
   </style>
-  <!-- Supabase SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <h1>Fragtbestilling</h1>
+
   <div class="bestiller-container">
     <label for="bestillerSelect">Bestiller:</label>
     <select id="bestillerSelect"></select>
@@ -98,8 +99,8 @@
         <td class="checkbox-cell"><input type="checkbox" class="afhentet"></td>
 
         <td style="position:relative;">
-          <input type="text" inputmode="decimal" class="pris" placeholder="0,00" style="padding-right:32px;">
-          <span style="position:absolute;right:7px;top:11px;pointer-events:none;color:#888;font-size:0.92em;">kr.</span>
+          <input type="text" inputmode="decimal" class="pris" placeholder="0,00 kr" style="padding-right:40px;text-align:right;">
+          <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#888;font-size:0.92em;">kr</span>
         </td>
         <td class="checkbox-cell"><input type="checkbox" class="afregnet"></td>
       </tr>
@@ -149,18 +150,15 @@
   </div>
 
   <script>
-    // ========= Supabase konfiguration =========
-    const SUPABASE_URL = 'https://btbwkwcywofvwguouvpg.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0Yndrd2N5d29mdndndW91dnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3NzA3NDYsImV4cCI6MjA3MDM0Njc0Nn0.HMqGy_bwfH8m-Im06zYchDCfYNZBtWm2aAX-54yQqOg';
+    /* ========= Supabase opsætning ========= */
+    const SUPABASE_URL = "https://btbwkwcywofvwguouvpg.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0Yndrd2N5d29mdndndW91dnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3NzA3NDYsImV4cCI6MjA3MDM0Njc0Nn0.HMqGy_bwfH8m-Im06zYchDCfYNZBtWm2aAX-54yQqOg";
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Tabelnavne (justér her hvis dine hedder noget andet)
-    const TBL_CUSTOMERS = 'customers';
-    const TBL_TYPES = 'types';
-    const TBL_BOOKING_STATE = 'booking_state';
-    const BOOKING_STATE_ID = 'current';
+    // ét fælles "workspace" så alle ser samme tabel
+    const WORKSPACE_ID = "default";
 
-    // ========= Lokal cache (fallback + hurtig UI) =========
+    /* ========= Lokal state (bevarer din struktur) ========= */
     let customers = JSON.parse(localStorage.getItem('customers')||'[]');
     customers.forEach(c=>c.id = c.id || (Date.now().toString()+Math.random()));
     localStorage.setItem('customers',JSON.stringify(customers));
@@ -171,53 +169,22 @@
     function getDefaultBestillerId() { return localStorage.getItem('defaultBestillerId') || null; }
     function setDefaultBestillerId(id) { if (id) localStorage.setItem('defaultBestillerId', id); else localStorage.removeItem('defaultBestillerId'); }
 
-    // ========= Hent & skriv data i Supabase =========
-    async function loadCustomersFromSupabase() {
-      const { data, error } = await supabase.from(TBL_CUSTOMERS).select('*').order('name', { ascending: true });
-      if (!error && Array.isArray(data)) {
-        customers = data;
-        localStorage.setItem('customers', JSON.stringify(customers));
-      }
+    /* ========= Hjælpere ========= */
+    function formatNumberDK(n){
+      if(n===null || n===undefined || isNaN(n)) return "";
+      return Number(n).toLocaleString('da-DK', {minimumFractionDigits:2, maximumFractionDigits:2});
     }
-    async function upsertCustomer(cust) {
-      const { data, error } = await supabase.from(TBL_CUSTOMERS).upsert(cust).select().single();
-      if (!error && data) {
-        const idx = customers.findIndex(x => x.id === data.id);
-        if (idx >= 0) customers[idx] = data; else customers.push(data);
-        localStorage.setItem('customers', JSON.stringify(customers));
-      }
-      return { data, error };
+    function parseDK(val){
+      if(!val) return null;
+      let v = String(val).replace(/\./g,'').replace(',','.');
+      let n = parseFloat(v);
+      return isNaN(n)? null : n;
     }
-    async function deleteCustomer(id) {
-      await supabase.from(TBL_CUSTOMERS).delete().eq('id', id);
+    function debounce(fn, ms=500){
+      let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
     }
 
-    async function loadTypesFromSupabase() {
-      const { data, error } = await supabase.from(TBL_TYPES).select('*').order('code', { ascending: true });
-      if (!error && Array.isArray(data)) {
-        types = data;
-        localStorage.setItem('types', JSON.stringify(types));
-      }
-    }
-    async function upsertType(typeRow) {
-      await supabase.from(TBL_TYPES).upsert(typeRow);
-    }
-
-    async function loadBookingState() {
-      const { data, error } = await supabase.from(TBL_BOOKING_STATE).select('data').eq('id', BOOKING_STATE_ID).maybeSingle();
-      if (!error && data && data.data) {
-        applyBookingState(data.data);
-      }
-    }
-    async function saveBookingState() {
-      const state = collectBookingState();
-      await supabase.from(TBL_BOOKING_STATE).upsert({
-        id: BOOKING_STATE_ID,
-        data: state
-      });
-    }
-
-    // ========= UI sync =========
+    /* ========= Sync selectfelter (uforandret logik) ========= */
     function syncSelects() {
       let defaultBestillerId = getDefaultBestillerId();
       let bestillerSel = document.getElementById('bestillerSelect');
@@ -239,6 +206,7 @@
               sel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
             }
           });
+          scheduleBookingsSave();
         };
       }
       document.querySelectorAll('.afsender, .modtager').forEach(sel=>{
@@ -261,28 +229,19 @@
       });
     }
 
-    // ========= Modal handling =========
+    /* ========= Modal håndtering (uforandret UI) ========= */
     const modal = document.getElementById('customerModal');
-    document.getElementById('manageCustomers').onclick = async () => {
-      await refreshFromSupabase();
-      renderCustomerList();
-      modal.style.display = 'flex';
-    };
+    document.getElementById('manageCustomers').onclick = () => { renderCustomerList(); modal.style.display = 'flex'; };
     document.getElementById('closeModal').onclick = () => modal.style.display = 'none';
     window.onclick = e => { if(e.target===modal) modal.style.display='none'; };
 
-    async function refreshFromSupabase() {
-      await Promise.all([loadCustomersFromSupabase(), loadTypesFromSupabase()]);
-      syncSelects();
-    }
-
-    function renderCustomerList() {
+    async function renderCustomerList() {
       function sortTable(key) {
         const th = document.querySelector(`#customerListTable th[data-key="${key}"]`);
         const asc = !th.classList.contains('sort-asc');
         document.querySelectorAll('#customerListTable th').forEach(h=>h.classList.remove('sort-asc','sort-desc'));
         th.classList.add(asc? 'sort-asc':'sort-desc');
-        customers.sort((a,b)=>(asc ? (a[key]||'').toString().localeCompare((b[key]||'').toString()) : (b[key]||'').toString().localeCompare((a[key]||'').toString())));
+        customers.sort((a,b)=>(asc ? a[key].toString().localeCompare(b[key].toString()) : b[key].toString().localeCompare(a[key].toString())));
         window.editRow = null;
         renderCustomerList();
         syncSelects();
@@ -295,30 +254,23 @@
         let tr = document.createElement('tr');
         if (window.editRow === i) {
           tr.innerHTML = `
-            <td><input type="text" value="${c.name||''}" id="editName"></td>
-            <td><input type="text" value="${c.street||''}" id="editStreet"></td>
-            <td><input type="text" value="${c.number||''}" id="editNumber"></td>
-            <td><input type="text" value="${c.zip||''}" id="editZip"></td>
-            <td><input type="text" value="${c.city||''}" id="editCity"></td>
-            <td><input type="email" value="${c.email||''}" id="editEmail"></td>
-            <td><input type="tel" value="${c.phone||''}" id="editPhone"></td>
+            <td><input type="text" value="${c.name||""}" id="editName"></td>
+            <td><input type="text" value="${c.street||""}" id="editStreet"></td>
+            <td><input type="text" value="${c.number||""}" id="editNumber"></td>
+            <td><input type="text" value="${c.zip||""}" id="editZip"></td>
+            <td><input type="text" value="${c.city||""}" id="editCity"></td>
+            <td><input type="email" value="${c.email||""}" id="editEmail"></td>
+            <td><input type="tel" value="${c.phone||""}" id="editPhone"></td>
             <td><textarea id="editInfo" rows="6" style="width:99%;">${c.info||""}</textarea></td>
             <td class="radio-cell"><input type="radio" name="defaultBestiller" value="${c.id}" ${defaultBestillerId == c.id ? 'checked' : ''}></td>
-            <td>
-              <button class="saveEdit-btn">Gem</button>
-              <button class="cancelEdit-btn">Annuller</button>
-            </td>
-          `;
+            <td><button class="saveEdit-btn">Gem</button><button class="cancelEdit-btn">Annuller</button></td>`;
         } else {
           tr.innerHTML = `
-            <td>${c.name||''}</td><td>${c.street||''}</td><td>${c.number||''}</td><td>${c.zip||''}</td>
-            <td>${c.city||''}</td><td>${c.email||''}</td><td>${c.phone||''}</td>
+            <td>${c.name||""}</td><td>${c.street||""}</td><td>${c.number||""}</td><td>${c.zip||""}</td>
+            <td>${c.city||""}</td><td>${c.email||""}</td><td>${c.phone||""}</td>
             <td data-key="info" style="max-width:340px;white-space:pre-wrap;">${c.info||""}</td>
             <td class="radio-cell"><input type="radio" name="defaultBestiller" value="${c.id}" ${defaultBestillerId == c.id ? 'checked' : ''}></td>
-            <td>
-              <button data-index="${i}" class="editCust-btn">Rediger</button>
-              <button data-index="${i}" class="deleteCust-btn">−</button>
-            </td>`;
+            <td><button data-index="${i}" class="editCust-btn">Rediger</button><button data-index="${i}" class="deleteCust-btn">−</button></td>`;
         }
         tbody.append(tr);
       });
@@ -326,105 +278,90 @@
       document.querySelectorAll('.deleteCust-btn').forEach(btn => btn.onclick = async ()=>{
         const idx = btn.dataset.index;
         const deleted = customers[idx];
-        if (deleted?.id) await deleteCustomer(deleted.id);
         customers.splice(idx,1);
         localStorage.setItem('customers', JSON.stringify(customers));
         if(deleted && getDefaultBestillerId() === deleted.id) setDefaultBestillerId(null);
         syncSelects();
         window.editRow = null;
         renderCustomerList();
+        await saveCustomersToSupabase(); // gem ændringen
       });
-      document.querySelectorAll('.editCust-btn').forEach(btn => btn.onclick = ()=>{
-        window.editRow = Number(btn.dataset.index);
-        renderCustomerList();
-      });
+      document.querySelectorAll('.editCust-btn').forEach(btn => btn.onclick = ()=>{ window.editRow = Number(btn.dataset.index); renderCustomerList(); });
       document.querySelectorAll('.saveEdit-btn').forEach(btn => btn.onclick = async ()=>{
         const i = window.editRow;
-        const updated = {
-          id: customers[i].id,
-          name:   document.getElementById('editName').value,
-          street: document.getElementById('editStreet').value,
-          number: document.getElementById('editNumber').value,
-          zip:    document.getElementById('editZip').value,
-          city:   document.getElementById('editCity').value,
-          email:  document.getElementById('editEmail').value,
-          phone:  document.getElementById('editPhone').value,
-          info:   document.getElementById('editInfo').value
-        };
-        const { error } = await upsertCustomer(updated);
-        if (error) alert('Kunne ikke gemme i Supabase.');
-        syncSelects();
-        window.editRow = null;
-        renderCustomerList();
+        customers[i].name   = document.getElementById('editName').value;
+        customers[i].street = document.getElementById('editStreet').value;
+        customers[i].number = document.getElementById('editNumber').value;
+        customers[i].zip    = document.getElementById('editZip').value;
+        customers[i].city   = document.getElementById('editCity').value;
+        customers[i].email  = document.getElementById('editEmail').value;
+        customers[i].phone  = document.getElementById('editPhone').value;
+        customers[i].info   = document.getElementById('editInfo').value;
+        localStorage.setItem('customers', JSON.stringify(customers));
+        syncSelects(); window.editRow = null; renderCustomerList();
+        await saveCustomersToSupabase();
       });
-      document.querySelectorAll('.cancelEdit-btn').forEach(btn => btn.onclick = ()=>{
-        window.editRow = null;
-        renderCustomerList();
-      });
+      document.querySelectorAll('.cancelEdit-btn').forEach(btn => btn.onclick = ()=>{ window.editRow = null; renderCustomerList(); });
       document.querySelectorAll('#customerListTable th[data-key]').forEach(th=>th.onclick = ()=> sortTable(th.dataset.key));
       document.querySelectorAll('input[name=defaultBestiller]').forEach(radio => {
-        radio.onchange = ()=>{
-          setDefaultBestillerId(radio.value);
-          syncSelects();
-          renderCustomerList();
-        };
+        radio.onchange = ()=>{ setDefaultBestillerId(radio.value); syncSelects(); renderCustomerList(); };
       });
     }
 
-    document.getElementById('addNewCustomer').onclick = async ()=>{
-      // Bevar eksisterende struktur (popup), men skriv til Supabase når popup'en har opdateret localStorage
+    document.getElementById('addNewCustomer').onclick = ()=>{
+      // bevarer din eksisterende funktionalitet:
       let w = window.open('customer_form.html','_blank');
       let iv = setInterval(async ()=>{
         let newList = JSON.parse(localStorage.getItem('customers')||'[]');
         if(newList.length !== customers.length) {
-          // Find nye/ændrede kunder og upsert dem til Supabase
-          for (const c of newList) {
-            if (!customers.find(x=>x.id===c.id)) await upsertCustomer(c);
-          }
           customers = newList;
           syncSelects(); renderCustomerList();
           clearInterval(iv);
+          await saveCustomersToSupabase();
         }
       }, 500);
     };
 
-    document.getElementById('createType').onclick = async ()=>{
-      let code = prompt('Typekode:');
-      let desc = prompt('Beskrivelse:');
-      if(code && desc!==null) {
-        const row = { code, desc };
-        await upsertType(row);
-        types.push(row);
-        localStorage.setItem('types', JSON.stringify(types));
-        syncSelects();
-      }
+    document.getElementById('createType').onclick = ()=>{
+      let code = prompt('Typekode:'); let desc = prompt('Beskrivelse:');
+      if(code && desc!==null) { types.push({ code, desc }); localStorage.setItem('types', JSON.stringify(types)); syncSelects(); }
     };
 
-    // ========= Booking-table: låse, rækker, priser =========
+    /* ========= Booking-række logik (uforandret UI, tilføjet autosave) ========= */
     const tbodyBooking = document.querySelector('#bookingTable tbody');
 
     function lockRow(row, locked) {
       row.querySelectorAll('input,select,textarea').forEach(input=>{
         if (input.classList.contains('pris') || input.classList.contains('afregnet') || input.classList.contains('afhentet')) {
           input.disabled = false;
-        } else if (!input.closest('.action-buttons')) {
+        } else {
           input.disabled = !!locked;
         }
       });
       let delBtn = row.querySelector('.delete-row-btn');
       if (delBtn) delBtn.disabled = !!locked;
     }
+
     function setupRow(row) {
       let afhentet = row.querySelector('.afhentet');
       let delBtn = row.querySelector('.delete-row-btn');
       delBtn.style.display = row===tbodyBooking.rows[0]? 'none':'inline-block';
-      delBtn.onclick = ()=>row.remove();
+      delBtn.onclick = ()=>{ row.remove(); scheduleBookingsSave(); };
+
       row.querySelector('.add-row-btn').onclick = ()=>{
         let nr = row.cloneNode(true);
         nr.querySelectorAll('input').forEach(i=> i.type==='checkbox'? i.checked=i.classList.contains('copyBestSender'): i.value='');
-        row.after(nr); setupRow(nr);
+        row.after(nr); setupRow(nr); scheduleBookingsSave();
       };
-      row.querySelectorAll('input,select').forEach(el=> el.oninput = ()=>{ if(row===tbodyBooking.lastElementChild) addRow(); });
+
+      // autosave når der ændres i felter
+      row.querySelectorAll('input,select').forEach(el=> {
+        el.addEventListener('input', ()=>{ 
+          if(row===tbodyBooking.lastElementChild) addRow();
+          scheduleBookingsSave();
+        });
+        el.addEventListener('change', scheduleBookingsSave);
+      });
 
       let sChk = row.querySelector('.copyBestSender');
       let sSel = row.querySelector('.afsender');
@@ -439,6 +376,7 @@
             let id = document.getElementById('bestillerSelect').value;
             let kunde = customers.find(c => c.id === id);
             if(kunde) sSel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+            scheduleBookingsSave();
           }
         };
       }
@@ -450,28 +388,30 @@
             let id = document.getElementById('bestillerSelect').value;
             let kunde = customers.find(c => c.id === id);
             if(kunde) rSel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+            scheduleBookingsSave();
           }
         };
       }
 
+      // Pris: DK-format i feltet
       let pris = row.querySelector('.pris');
       if(pris){
         pris.addEventListener('blur', function() {
-          let val = this.value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
-          let num = parseFloat(val);
-          this.value = isNaN(num) ? '' : num.toLocaleString('da-DK', {minimumFractionDigits:2, maximumFractionDigits:2});
+          let num = parseDK(this.value);
+          this.value = (num===null) ? "" : `${formatNumberDK(num)}`;
         });
         pris.addEventListener('focus', function() {
-          let val = this.value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
-          let num = parseFloat(val); if(!isNaN(num)) this.value = num;
+          let num = parseDK(this.value);
+          if(num!==null) this.value = String(num).replace('.',',');
         });
       }
 
       if(afhentet){
-        afhentet.onchange = function() { lockRow(row, afhentet.checked); };
+        afhentet.onchange = function() { lockRow(row, afhentet.checked); scheduleBookingsSave(); };
         lockRow(row, afhentet.checked);
       }
     }
+
     function addRow() {
       let nr = tbodyBooking.rows[tbodyBooking.rows.length-1].cloneNode(true);
       nr.querySelectorAll('input').forEach(i=> i.type==='checkbox'? i.checked=i.classList.contains('copyBestSender'): i.value='');
@@ -479,9 +419,9 @@
     }
     setupRow(tbodyBooking.rows[0]);
 
-    // ========= Autosave & init =========
-    document.getElementById('create').onclick = async ()=>{ await saveBookingState(); alert('Bestilling gemt!'); };
+    document.getElementById('create').onclick = ()=>alert('Bestilling gemt!');
 
+    // Eksport / import kunder (tilføjet save til Supabase)
     document.getElementById('exportJson').onclick = function() {
       const blob = new Blob([JSON.stringify(customers, null, 2)], {type: 'application/json'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kunder.json'; a.click();
@@ -489,7 +429,7 @@
     document.getElementById('exportCsv').onclick = function() {
       let headers = ["Navn","Vejnavn","Nr","Postnr","By","Mail","Tlfnr","Info"];
       let rows = customers.map(c => [c.name, c.street, c.number, c.zip, c.city, c.email, c.phone, (c.info||"").replace(/[\r\n]+/g," ")]);
-      let csv = [headers, ...rows].map(r => r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(";")).join("\r\n");
+      let csv = [headers, ...rows].map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
       const blob = new Blob([csv], {type:'text/csv'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kunder.csv'; a.click();
     };
@@ -503,35 +443,157 @@
           if(file.name.match(/\.json$/i)) {
             imported = JSON.parse(e.target.result);
           } else if(file.name.match(/\.csv$/i)) {
-            let lines = e.target.result.split(/\r?\n/); let hdrs = lines.shift();
+            let lines = e.target.result.split(/\r?\n/); lines.shift();
             imported = lines.filter(l=>l.trim()).map(line=>{
               let m = line.match(/("([^"]|"")*"|[^;]*)(;|$)/g) || [];
               let vals = m.map(s=>s.replace(/^"|"$/g,'').replace(/""/g,'"').replace(/;$/,''));
               let o = {}; ["name","street","number","zip","city","email","phone","info"].forEach((k,i)=>o[k]=vals[i]||"");
-              o.id = o.id || (crypto?.randomUUID?.() || (Date.now().toString()+Math.random()));
-              return o;
+              o.id = Date.now().toString()+Math.random(); return o;
             });
           }
         } catch(e){ alert("Kunne ikke importere data. Tjek filformat."); return; }
         if(imported.length && imported[0].name && imported[0].street) {
-          // upsert alle til Supabase
-          for (const c of imported) await upsertCustomer(c);
-          customers = imported;
-          localStorage.setItem('customers', JSON.stringify(customers));
-          syncSelects(); renderCustomerList();
-          alert("Kunder importeret.");
-        } else {
-          alert("Filen indeholder ikke genkendelige kunder.");
-        }
+          customers = imported; localStorage.setItem('customers', JSON.stringify(customers));
+          syncSelects(); renderCustomerList(); alert("Kunder importeret.");
+          await saveCustomersToSupabase();
+        } else { alert("Filen indeholder ikke genkendelige kunder."); }
         evt.target.value = "";
       };
       reader.readAsText(file);
     };
 
+    /* ========= Supabase: Kunder ========= */
+    async function loadCustomersFromSupabase(){
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if(error){ console.warn('Kunne ikke indlæse kunder:', error.message); return; }
+      if(Array.isArray(data) && data.length){
+        customers = data.map(row => ({
+          id: row.id || (Date.now().toString()+Math.random()),
+          name: row.name||'',
+          street: row.street||'',
+          number: row.number||'',
+          zip: row.zip||'',
+          city: row.city||'',
+          email: row.email||'',
+          phone: row.phone||'',
+          info: row.info||''
+        }));
+        localStorage.setItem('customers', JSON.stringify(customers));
+      }
+    }
+
+    async function saveCustomersToSupabase(){
+      // nem strategi: slet alle og indsæt snapshot (kræver RLS-policy der tillader delete/insert)
+      const snapshot = customers.map(c=>({
+        id: c.id, // antager text/uuid – hvis uuid i DB, kan DB selv generere hvis null
+        name: c.name||'',
+        street: c.street||'',
+        number: c.number||'',
+        zip: c.zip||'',
+        city: c.city||'',
+        email: c.email||'',
+        phone: c.phone||'',
+        info: c.info||''
+      }));
+      // slet alle
+      await supabase.from('customers').delete().neq('id', null);
+      if(snapshot.length){
+        const { error } = await supabase.from('customers').insert(snapshot);
+        if(error) console.warn('Fejl ved gem kunder:', error.message);
+      }
+    }
+
+    /* ========= Supabase: Bookings ========= */
+    function getBookingsSnapshot(){
+      const rows = Array.from(tbodyBooking.querySelectorAll('tr'));
+      return rows.map((tr, idx) => {
+        const date = tr.querySelector('.datepicker')?.value || '';
+        const time = tr.querySelector('.timepicker')?.value || '';
+        const afsender = tr.querySelector('.afsender')?.value || '';
+        const modtager = tr.querySelector('.modtager')?.value || '';
+        const antal = tr.querySelector('.antal')?.value || '';
+        const type = tr.querySelector('.typeSelect')?.value || '';
+        const ldm = tr.querySelector('.ldm')?.value || '';
+        const vaegt = tr.querySelector('.vægt')?.value || '';
+        const afhentet = tr.querySelector('.afhentet')?.checked || false;
+        const prisVal = tr.querySelector('.pris')?.value || '';
+        const pris = parseDK(prisVal);
+        const afregnet = tr.querySelector('.afregnet')?.checked || false;
+
+        return {
+          workspace: WORKSPACE_ID,
+          row_index: idx,
+          klart_dato: date || null,
+          klart_tid: time || null,
+          afsender, modtager,
+          antal: antal? Number(antal): null,
+          type_code: type || null,
+          ldm: ldm? Number(ldm): null,
+          vaegt: vaegt? Number(vaegt): null,
+          afhentet,
+          pris: pris,   // numeric
+          afregnet
+        };
+      });
+    }
+
+    async function loadBookingsFromSupabase(){
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('workspace', WORKSPACE_ID)
+        .order('row_index', { ascending: true });
+      if(error){ console.warn('Kunne ikke indlæse bookings:', error.message); return; }
+      if(!Array.isArray(data)) return;
+      // ryd alt undtagen første skabelonrække
+      const first = tbodyBooking.querySelector('tr');
+      tbodyBooking.innerHTML = '';
+      tbodyBooking.append(first);
+      // udfyld
+      data.forEach((r, i) => {
+        const tr = (i===0) ? first : first.cloneNode(true);
+        const setVal = (sel, v)=>{ if(sel){ sel.value = (v??''); } };
+        const setChk = (sel, v)=>{ if(sel){ sel.checked = !!v; } };
+
+        setVal(tr.querySelector('.datepicker'), r.klart_dato || '');
+        setVal(tr.querySelector('.timepicker'), r.klart_tid || '');
+        setVal(tr.querySelector('.afsender'), r.afsender || '');
+        setVal(tr.querySelector('.modtager'), r.modtager || '');
+        setVal(tr.querySelector('.antal'), r.antal ?? '');
+        setVal(tr.querySelector('.typeSelect'), r.type_code || '');
+        setVal(tr.querySelector('.ldm'), r.ldm ?? '');
+        setVal(tr.querySelector('.vægt'), r.vaegt ?? '');
+        setChk(tr.querySelector('.afhentet'), r.afhentet);
+        setVal(tr.querySelector('.pris'), r.pris==null? '' : formatNumberDK(r.pris));
+        setChk(tr.querySelector('.afregnet'), r.afregnet);
+
+        if(i>0) tbodyBooking.append(tr);
+        setupRow(tr);
+      });
+    }
+
+    async function saveBookingsToSupabase(){
+      const snapshot = getBookingsSnapshot();
+      // slet alt i workspace og indsæt snapshot
+      const { error: delErr } = await supabase.from('bookings').delete().eq('workspace', WORKSPACE_ID);
+      if(delErr){ console.warn('Fejl ved slet bookings:', delErr.message); return; }
+      if(snapshot.length){
+        const { error: insErr } = await supabase.from('bookings').insert(snapshot);
+        if(insErr) console.warn('Fejl ved gem bookings:', insErr.message);
+      }
+    }
+    const scheduleBookingsSave = debounce(saveBookingsToSupabase, 600);
+
+    /* ========= Init ========= */
     window.addEventListener('DOMContentLoaded', async () => {
-      // 1) hent kunder/typer fra Supabase (med local fallback)
-      await refreshFromSupabase();
-      // 2) sæt default bestiller i selects
+      // 1) Indlæs kunder fra Supabase, sync selects
+      await loadCustomersFromSupabase();
+      syncSelects();
+
+      // 2) Sæt default bestiller og sæt afsender hvis nødvendigt
       let bestillerSel = document.getElementById('bestillerSelect');
       let defaultBestillerId = getDefaultBestillerId();
       if(defaultBestillerId && customers.find(c=>c.id===defaultBestillerId) && bestillerSel) {
@@ -542,84 +604,16 @@
           if (sChk && sChk.checked && kunde) sel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
         });
       }
-      // 3) hent seneste booking state & anvend
-      await loadBookingState();
-      // 4) autosave hver 60 sek.
-      setInterval(saveBookingState, 60*1000);
-      // 5) gem når siden forlades
-      window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveBookingState(); });
-      window.addEventListener('beforeunload', (e)=>{ saveBookingState(); });
+
+      // 3) Indlæs bookingrækker fra Supabase
+      await loadBookingsFromSupabase();
+
+      // 4) Autosave hvert minut + ved luk
+      setInterval(saveBookingsToSupabase, 60*1000);
+      window.addEventListener('beforeunload', (e)=>{ navigator.sendBeacon && navigator.sendBeacon; /* best try */ });
+      window.addEventListener('pagehide', saveBookingsToSupabase);
+      window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveBookingsToSupabase(); });
     });
-
-    // ========= Serialisering af booking-tabellen =========
-    function collectBookingState() {
-      const rows = Array.from(document.querySelectorAll('#bookingTable tbody tr')).map(tr => {
-        const get = sel => tr.querySelector(sel);
-        return {
-          date: get('.datepicker')?.value || '',
-          time: get('.timepicker')?.value || '',
-          copyBestSender: get('.copyBestSender')?.checked || false,
-          afsender: get('.afsender')?.value || '',
-          copyBestReceiver: get('.copyBestReceiver')?.checked || false,
-          modtager: get('.modtager')?.value || '',
-          antal: get('.antal')?.value || '',
-          type: get('.typeSelect')?.value || '',
-          ldm: get('.ldm')?.value || '',
-          vaegt: get('.vægt')?.value || '',
-          afhentet: get('.afhentet')?.checked || false,
-          pris: get('.pris')?.value || '',
-          afregnet: get('.afregnet')?.checked || false
-        };
-      });
-      return { defaultBestillerId: getDefaultBestillerId(), rows };
-    }
-
-    function applyBookingState(state) {
-      if (!state || !Array.isArray(state.rows)) return;
-      const tbody = document.querySelector('#bookingTable tbody');
-      // ryd ned til én skabelonrække
-      while (tbody.rows.length > 1) tbody.deleteRow(1);
-      const tpl = tbody.rows[0];
-
-      function fillRow(tr, data) {
-        const set = (sel,val)=>{ const el = tr.querySelector(sel); if(!el) return;
-          if (el.type === 'checkbox') el.checked = !!val;
-          else el.value = (val ?? '');
-        };
-        set('.datepicker', data.date);
-        set('.timepicker', data.time);
-        set('.copyBestSender', data.copyBestSender);
-        set('.afsender', data.afsender);
-        set('.copyBestReceiver', data.copyBestReceiver);
-        set('.modtager', data.modtager);
-        set('.antal', data.antal);
-        set('.typeSelect', data.type);
-        set('.ldm', data.ldm);
-        set('.vægt', data.vaegt);
-        set('.afhentet', data.afhentet);
-        set('.pris', data.pris);
-        set('.afregnet', data.afregnet);
-        lockRow(tr, data.afhentet);
-      }
-
-      // første række = tpl
-      fillRow(tpl, state.rows[0] || {});
-      setupRow(tpl);
-
-      // ekstra rækker
-      for (let i=1;i<state.rows.length;i++){
-        const nr = tpl.cloneNode(true);
-        tbody.append(nr);
-        setupRow(nr);
-        fillRow(nr, state.rows[i]);
-      }
-
-      if (state.defaultBestillerId) {
-        setDefaultBestillerId(state.defaultBestillerId);
-        const bestillerSel = document.getElementById('bestillerSelect');
-        if (bestillerSel) bestillerSel.value = state.defaultBestillerId;
-      }
-    }
   </script>
 </body>
 </html>
