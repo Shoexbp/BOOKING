@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1600, initial-scale=1.0">
+  <title>Fragtbestilling & Kartoteker</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 1600px; margin: auto; }
+    h1, h2 { margin-top: 30px; }
+    .bestiller-container { margin-bottom: 20px; }
+    .bestiller-container label { font-weight: bold; margin-right: 10px; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    th { background: #f0f0f0; }
+    tbody td { vertical-align: middle; }
+
+    input, select, button { box-sizing: border-box; padding: 4px; font-family: inherit; }
+    input[type="text"], input[type="number"], select, input[type="date"], input[type="time"] { width: 100%; }
+
+    .checkbox-cell { text-align: center; }
+    .add-row-btn, .delete-row-btn { padding: 1px 3px; font-size: 0.5em; cursor: pointer; border-radius: 4px; }
+    .add-row-btn { background: #3498db; color: white; }
+    .delete-row-btn { background: #e74c3c; color: white; }
+    .delete-row-btn[disabled] { background: #ccc; color: #999; cursor: not-allowed; }
+    .action-buttons { margin-top: 20px; display: flex; gap: 10px; }
+    .action-buttons button { padding: 6px 12px; font-size: 1em; }
+
+    /* Modal */
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 9999; }
+    .modal-content { background: white; padding: 24px; border-radius: 10px; max-width: 98vw; width: 98vw; height: 95vh; overflow:auto;}
+    .customer-list table { font-size: 1.1em; width: 100%; }
+    .customer-list th, .customer-list td { padding: 10px 6px; }
+    .customer-list th[data-key="info"], .customer-list td[data-key="info"] { min-width: 320px; width: 340px; }
+    .radio-cell { text-align: center; }
+    .editCust-btn, .saveEdit-btn, .cancelEdit-btn { margin-right: 4px; font-size: 0.85em; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; }
+    .close-btn { background: #e74c3c; color: #fff; border: none; font-size: 1.1em; font-weight: bold; border-radius: 6px; padding: 10px 28px; cursor: pointer; transition: background 0.2s; margin-left: 10px; }
+    .close-btn:hover { background: #c0392b; }
+
+    /* Kolonnebredder */
+    th:nth-child(2), td:nth-child(2) { width: 90px; min-width: 70px; max-width: 120px; }
+    th:nth-child(3), td:nth-child(3),
+    th:nth-child(4), td:nth-child(4) { width: 340px; min-width: 260px; max-width: 400px; }
+    th:nth-child(5), td:nth-child(5),
+    th:nth-child(7), td:nth-child(7),
+    th:nth-child(8), td:nth-child(8) { width: 68px; min-width: 55px; max-width: 90px; }
+    th:nth-child(6), td:nth-child(6) { width: 136px; min-width: 110px; max-width: 200px; }
+    th:nth-child(9), td:nth-child(9) { width: 85px; min-width: 55px; max-width: 110px; text-align:center;}
+    th:nth-child(10), td:nth-child(10) { width: 180px; min-width: 120px; max-width: 250px; }
+    th:nth-child(11), td:nth-child(11) { width: 85px; min-width: 65px; max-width: 120px; text-align: center; }
+
+    /* Checkbox + felt i samme linje uden at hæve højden */
+    .inline-field { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .inline-field > input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+    .inline-field > select { flex: 1 1 auto; min-width: 0; }
+  </style>
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h1>Fragtbestilling</h1>
+  <div class="bestiller-container">
+    <label for="bestillerSelect">Bestiller:</label>
+    <select id="bestillerSelect"></select>
+  </div>
+
+  <table id="bookingTable">
+    <thead>
+      <tr>
+        <th></th><th>Klartid</th><th>Afsender</th><th>Modtager</th><th>Antal</th><th>Type</th><th>LDM</th><th>Vægt</th><th>Afhentet</th><th>Pris (DKK)</th><th>Afregnet</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="checkbox-cell"><button class="add-row-btn">+</button><button class="delete-row-btn">−</button></td>
+        <td><input type="date" class="datepicker"><input type="time" class="timepicker"></td>
+
+        <td>
+          <div class="inline-field">
+            <input type="checkbox" class="copyBestSender" checked>
+            <select class="afsender"></select>
+          </div>
+        </td>
+
+        <td>
+          <div class="inline-field">
+            <input type="checkbox" class="copyBestReceiver">
+            <select class="modtager"></select>
+          </div>
+        </td>
+
+        <td><input type="number" min="1" class="antal"></td>
+        <td><select class="typeSelect"></select></td>
+        <td><input type="number" step="0.01" class="ldm"></td>
+        <td><input type="number" step="0.01" class="vægt"></td>
+        <td class="checkbox-cell"><input type="checkbox" class="afhentet"></td>
+
+        <td style="position:relative;">
+          <input type="text" inputmode="decimal" class="pris" placeholder="0,00" style="padding-right:32px;">
+          <span style="position:absolute;right:7px;top:11px;pointer-events:none;color:#888;font-size:0.92em;">kr.</span>
+        </td>
+        <td class="checkbox-cell"><input type="checkbox" class="afregnet"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="action-buttons">
+    <button id="create">Opret bestilling</button>
+    <button id="manageCustomers">Kunder</button>
+    <button id="createType">Opret type</button>
+  </div>
+
+  <!-- Customer Management Modal -->
+  <div id="customerModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Administrer kunder</h2>
+        <button id="closeModal" class="close-btn">Luk vindue</button>
+      </div>
+      <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
+        <button id="exportJson">Eksporter JSON</button>
+        <button id="exportCsv">Eksporter CSV</button>
+        <label style="display:inline-block;">
+          <input type="file" id="importCustomers" accept=".json,.csv" style="display:none;">
+          <span id="importLabel" style="padding:6px 10px;border:1px solid #888;border-radius:4px;cursor:pointer; background:#f3f3f3;">Importer</span>
+        </label>
+      </div>
+      <button id="addNewCustomer">+</button>
+      <div class="customer-list">
+        <table id="customerListTable">
+          <thead><tr>
+            <th data-key="name">Navn</th>
+            <th data-key="street">Vejnavn</th>
+            <th data-key="number">Nr</th>
+            <th data-key="zip">Postnr</th>
+            <th data-key="city">By</th>
+            <th data-key="email">Mail</th>
+            <th data-key="phone">Tlfnr</th>
+            <th data-key="info">Info</th>
+            <th>Standard bestiller</th>
+            <th>Handling</th>
+          </tr></thead>
+          <tbody id="customerTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========= Supabase konfiguration =========
+    const SUPABASE_URL = 'https://btbwkwcywofvwguouvpg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0Yndrd2N5d29mdndndW91dnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3NzA3NDYsImV4cCI6MjA3MDM0Njc0Nn0.HMqGy_bwfH8m-Im06zYchDCfYNZBtWm2aAX-54yQqOg';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Tabelnavne (justér her hvis dine hedder noget andet)
+    const TBL_CUSTOMERS = 'customers';
+    const TBL_TYPES = 'types';
+    const TBL_BOOKING_STATE = 'booking_state';
+    const BOOKING_STATE_ID = 'current';
+
+    // ========= Lokal cache (fallback + hurtig UI) =========
+    let customers = JSON.parse(localStorage.getItem('customers')||'[]');
+    customers.forEach(c=>c.id = c.id || (Date.now().toString()+Math.random()));
+    localStorage.setItem('customers',JSON.stringify(customers));
+
+    let types     = JSON.parse(localStorage.getItem('types')||'[]');
+    window.editRow = null;
+
+    function getDefaultBestillerId() { return localStorage.getItem('defaultBestillerId') || null; }
+    function setDefaultBestillerId(id) { if (id) localStorage.setItem('defaultBestillerId', id); else localStorage.removeItem('defaultBestillerId'); }
+
+    // ========= Hent & skriv data i Supabase =========
+    async function loadCustomersFromSupabase() {
+      const { data, error } = await supabase.from(TBL_CUSTOMERS).select('*').order('name', { ascending: true });
+      if (!error && Array.isArray(data)) {
+        customers = data;
+        localStorage.setItem('customers', JSON.stringify(customers));
+      }
+    }
+    async function upsertCustomer(cust) {
+      const { data, error } = await supabase.from(TBL_CUSTOMERS).upsert(cust).select().single();
+      if (!error && data) {
+        const idx = customers.findIndex(x => x.id === data.id);
+        if (idx >= 0) customers[idx] = data; else customers.push(data);
+        localStorage.setItem('customers', JSON.stringify(customers));
+      }
+      return { data, error };
+    }
+    async function deleteCustomer(id) {
+      await supabase.from(TBL_CUSTOMERS).delete().eq('id', id);
+    }
+
+    async function loadTypesFromSupabase() {
+      const { data, error } = await supabase.from(TBL_TYPES).select('*').order('code', { ascending: true });
+      if (!error && Array.isArray(data)) {
+        types = data;
+        localStorage.setItem('types', JSON.stringify(types));
+      }
+    }
+    async function upsertType(typeRow) {
+      await supabase.from(TBL_TYPES).upsert(typeRow);
+    }
+
+    async function loadBookingState() {
+      const { data, error } = await supabase.from(TBL_BOOKING_STATE).select('data').eq('id', BOOKING_STATE_ID).maybeSingle();
+      if (!error && data && data.data) {
+        applyBookingState(data.data);
+      }
+    }
+    async function saveBookingState() {
+      const state = collectBookingState();
+      await supabase.from(TBL_BOOKING_STATE).upsert({
+        id: BOOKING_STATE_ID,
+        data: state
+      });
+    }
+
+    // ========= UI sync =========
+    function syncSelects() {
+      let defaultBestillerId = getDefaultBestillerId();
+      let bestillerSel = document.getElementById('bestillerSelect');
+      if (bestillerSel) {
+        bestillerSel.innerHTML = '<option value=""></option>';
+        customers.forEach((c) => {
+          let opt = document.createElement('option');
+          opt.value = c.id || '';
+          opt.text  = `${c.name}, ${c.street} ${c.number}, ${c.zip} ${c.city}`;
+          if (defaultBestillerId && c.id === defaultBestillerId) opt.selected = true;
+          bestillerSel.append(opt);
+        });
+        bestillerSel.onchange = function() {
+          let id = this.value;
+          let kunde = customers.find(c => c.id === id);
+          document.querySelectorAll('.afsender').forEach(sel => {
+            let sChk = sel.closest('tr').querySelector('.copyBestSender');
+            if (sChk && sChk.checked && kunde) {
+              sel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+            }
+          });
+        };
+      }
+      document.querySelectorAll('.afsender, .modtager').forEach(sel=>{
+        sel.innerHTML = '<option value=""></option>';
+        customers.forEach(c => {
+          let opt = document.createElement('option');
+          opt.value = `${c.name} ${c.street} ${c.number} ${c.zip} ${c.city}`;
+          opt.text  = `${c.name}, ${c.street} ${c.number}, ${c.zip} ${c.city}`;
+          sel.append(opt);
+        });
+      });
+      document.querySelectorAll('.typeSelect').forEach(sel=>{
+        sel.innerHTML = '<option value=""></option>';
+        types.forEach(t=>{
+          let opt = document.createElement('option');
+          opt.value = t.code;
+          opt.text  = t.code;
+          sel.append(opt);
+        });
+      });
+    }
+
+    // ========= Modal handling =========
+    const modal = document.getElementById('customerModal');
+    document.getElementById('manageCustomers').onclick = async () => {
+      await refreshFromSupabase();
+      renderCustomerList();
+      modal.style.display = 'flex';
+    };
+    document.getElementById('closeModal').onclick = () => modal.style.display = 'none';
+    window.onclick = e => { if(e.target===modal) modal.style.display='none'; };
+
+    async function refreshFromSupabase() {
+      await Promise.all([loadCustomersFromSupabase(), loadTypesFromSupabase()]);
+      syncSelects();
+    }
+
+    function renderCustomerList() {
+      function sortTable(key) {
+        const th = document.querySelector(`#customerListTable th[data-key="${key}"]`);
+        const asc = !th.classList.contains('sort-asc');
+        document.querySelectorAll('#customerListTable th').forEach(h=>h.classList.remove('sort-asc','sort-desc'));
+        th.classList.add(asc? 'sort-asc':'sort-desc');
+        customers.sort((a,b)=>(asc ? (a[key]||'').toString().localeCompare((b[key]||'').toString()) : (b[key]||'').toString().localeCompare((a[key]||'').toString())));
+        window.editRow = null;
+        renderCustomerList();
+        syncSelects();
+      }
+      const tbody = document.getElementById('customerTableBody');
+      tbody.innerHTML = '';
+      let defaultBestillerId = getDefaultBestillerId();
+
+      customers.forEach((c,i) => {
+        let tr = document.createElement('tr');
+        if (window.editRow === i) {
+          tr.innerHTML = `
+            <td><input type="text" value="${c.name||''}" id="editName"></td>
+            <td><input type="text" value="${c.street||''}" id="editStreet"></td>
+            <td><input type="text" value="${c.number||''}" id="editNumber"></td>
+            <td><input type="text" value="${c.zip||''}" id="editZip"></td>
+            <td><input type="text" value="${c.city||''}" id="editCity"></td>
+            <td><input type="email" value="${c.email||''}" id="editEmail"></td>
+            <td><input type="tel" value="${c.phone||''}" id="editPhone"></td>
+            <td><textarea id="editInfo" rows="6" style="width:99%;">${c.info||""}</textarea></td>
+            <td class="radio-cell"><input type="radio" name="defaultBestiller" value="${c.id}" ${defaultBestillerId == c.id ? 'checked' : ''}></td>
+            <td>
+              <button class="saveEdit-btn">Gem</button>
+              <button class="cancelEdit-btn">Annuller</button>
+            </td>
+          `;
+        } else {
+          tr.innerHTML = `
+            <td>${c.name||''}</td><td>${c.street||''}</td><td>${c.number||''}</td><td>${c.zip||''}</td>
+            <td>${c.city||''}</td><td>${c.email||''}</td><td>${c.phone||''}</td>
+            <td data-key="info" style="max-width:340px;white-space:pre-wrap;">${c.info||""}</td>
+            <td class="radio-cell"><input type="radio" name="defaultBestiller" value="${c.id}" ${defaultBestillerId == c.id ? 'checked' : ''}></td>
+            <td>
+              <button data-index="${i}" class="editCust-btn">Rediger</button>
+              <button data-index="${i}" class="deleteCust-btn">−</button>
+            </td>`;
+        }
+        tbody.append(tr);
+      });
+
+      document.querySelectorAll('.deleteCust-btn').forEach(btn => btn.onclick = async ()=>{
+        const idx = btn.dataset.index;
+        const deleted = customers[idx];
+        if (deleted?.id) await deleteCustomer(deleted.id);
+        customers.splice(idx,1);
+        localStorage.setItem('customers', JSON.stringify(customers));
+        if(deleted && getDefaultBestillerId() === deleted.id) setDefaultBestillerId(null);
+        syncSelects();
+        window.editRow = null;
+        renderCustomerList();
+      });
+      document.querySelectorAll('.editCust-btn').forEach(btn => btn.onclick = ()=>{
+        window.editRow = Number(btn.dataset.index);
+        renderCustomerList();
+      });
+      document.querySelectorAll('.saveEdit-btn').forEach(btn => btn.onclick = async ()=>{
+        const i = window.editRow;
+        const updated = {
+          id: customers[i].id,
+          name:   document.getElementById('editName').value,
+          street: document.getElementById('editStreet').value,
+          number: document.getElementById('editNumber').value,
+          zip:    document.getElementById('editZip').value,
+          city:   document.getElementById('editCity').value,
+          email:  document.getElementById('editEmail').value,
+          phone:  document.getElementById('editPhone').value,
+          info:   document.getElementById('editInfo').value
+        };
+        const { error } = await upsertCustomer(updated);
+        if (error) alert('Kunne ikke gemme i Supabase.');
+        syncSelects();
+        window.editRow = null;
+        renderCustomerList();
+      });
+      document.querySelectorAll('.cancelEdit-btn').forEach(btn => btn.onclick = ()=>{
+        window.editRow = null;
+        renderCustomerList();
+      });
+      document.querySelectorAll('#customerListTable th[data-key]').forEach(th=>th.onclick = ()=> sortTable(th.dataset.key));
+      document.querySelectorAll('input[name=defaultBestiller]').forEach(radio => {
+        radio.onchange = ()=>{
+          setDefaultBestillerId(radio.value);
+          syncSelects();
+          renderCustomerList();
+        };
+      });
+    }
+
+    document.getElementById('addNewCustomer').onclick = async ()=>{
+      // Bevar eksisterende struktur (popup), men skriv til Supabase når popup'en har opdateret localStorage
+      let w = window.open('customer_form.html','_blank');
+      let iv = setInterval(async ()=>{
+        let newList = JSON.parse(localStorage.getItem('customers')||'[]');
+        if(newList.length !== customers.length) {
+          // Find nye/ændrede kunder og upsert dem til Supabase
+          for (const c of newList) {
+            if (!customers.find(x=>x.id===c.id)) await upsertCustomer(c);
+          }
+          customers = newList;
+          syncSelects(); renderCustomerList();
+          clearInterval(iv);
+        }
+      }, 500);
+    };
+
+    document.getElementById('createType').onclick = async ()=>{
+      let code = prompt('Typekode:');
+      let desc = prompt('Beskrivelse:');
+      if(code && desc!==null) {
+        const row = { code, desc };
+        await upsertType(row);
+        types.push(row);
+        localStorage.setItem('types', JSON.stringify(types));
+        syncSelects();
+      }
+    };
+
+    // ========= Booking-table: låse, rækker, priser =========
+    const tbodyBooking = document.querySelector('#bookingTable tbody');
+
+    function lockRow(row, locked) {
+      row.querySelectorAll('input,select,textarea').forEach(input=>{
+        if (input.classList.contains('pris') || input.classList.contains('afregnet') || input.classList.contains('afhentet')) {
+          input.disabled = false;
+        } else if (!input.closest('.action-buttons')) {
+          input.disabled = !!locked;
+        }
+      });
+      let delBtn = row.querySelector('.delete-row-btn');
+      if (delBtn) delBtn.disabled = !!locked;
+    }
+    function setupRow(row) {
+      let afhentet = row.querySelector('.afhentet');
+      let delBtn = row.querySelector('.delete-row-btn');
+      delBtn.style.display = row===tbodyBooking.rows[0]? 'none':'inline-block';
+      delBtn.onclick = ()=>row.remove();
+      row.querySelector('.add-row-btn').onclick = ()=>{
+        let nr = row.cloneNode(true);
+        nr.querySelectorAll('input').forEach(i=> i.type==='checkbox'? i.checked=i.classList.contains('copyBestSender'): i.value='');
+        row.after(nr); setupRow(nr);
+      };
+      row.querySelectorAll('input,select').forEach(el=> el.oninput = ()=>{ if(row===tbodyBooking.lastElementChild) addRow(); });
+
+      let sChk = row.querySelector('.copyBestSender');
+      let sSel = row.querySelector('.afsender');
+      if (sChk && sSel && sChk.checked) {
+        let bestillerSel = document.getElementById('bestillerSelect');
+        let id = bestillerSel.value; let kunde = customers.find(c => c.id === id);
+        if(kunde) sSel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+      }
+      if (sChk && sSel) {
+        sChk.onchange = ()=>{
+          if(sChk.checked) {
+            let id = document.getElementById('bestillerSelect').value;
+            let kunde = customers.find(c => c.id === id);
+            if(kunde) sSel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+          }
+        };
+      }
+      let rChk = row.querySelector('.copyBestReceiver');
+      let rSel = row.querySelector('.modtager');
+      if (rChk && rSel) {
+        rChk.onchange = ()=>{
+          if(rChk.checked) {
+            let id = document.getElementById('bestillerSelect').value;
+            let kunde = customers.find(c => c.id === id);
+            if(kunde) rSel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+          }
+        };
+      }
+
+      let pris = row.querySelector('.pris');
+      if(pris){
+        pris.addEventListener('blur', function() {
+          let val = this.value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
+          let num = parseFloat(val);
+          this.value = isNaN(num) ? '' : num.toLocaleString('da-DK', {minimumFractionDigits:2, maximumFractionDigits:2});
+        });
+        pris.addEventListener('focus', function() {
+          let val = this.value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
+          let num = parseFloat(val); if(!isNaN(num)) this.value = num;
+        });
+      }
+
+      if(afhentet){
+        afhentet.onchange = function() { lockRow(row, afhentet.checked); };
+        lockRow(row, afhentet.checked);
+      }
+    }
+    function addRow() {
+      let nr = tbodyBooking.rows[tbodyBooking.rows.length-1].cloneNode(true);
+      nr.querySelectorAll('input').forEach(i=> i.type==='checkbox'? i.checked=i.classList.contains('copyBestSender'): i.value='');
+      tbodyBooking.append(nr); setupRow(nr);
+    }
+    setupRow(tbodyBooking.rows[0]);
+
+    // ========= Autosave & init =========
+    document.getElementById('create').onclick = async ()=>{ await saveBookingState(); alert('Bestilling gemt!'); };
+
+    document.getElementById('exportJson').onclick = function() {
+      const blob = new Blob([JSON.stringify(customers, null, 2)], {type: 'application/json'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kunder.json'; a.click();
+    };
+    document.getElementById('exportCsv').onclick = function() {
+      let headers = ["Navn","Vejnavn","Nr","Postnr","By","Mail","Tlfnr","Info"];
+      let rows = customers.map(c => [c.name, c.street, c.number, c.zip, c.city, c.email, c.phone, (c.info||"").replace(/[\r\n]+/g," ")]);
+      let csv = [headers, ...rows].map(r => r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(";")).join("\r\n");
+      const blob = new Blob([csv], {type:'text/csv'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kunder.csv'; a.click();
+    };
+    document.getElementById('importLabel').onclick = function() { document.getElementById('importCustomers').click(); };
+    document.getElementById('importCustomers').onchange = async function(evt) {
+      const file = evt.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        let imported = [];
+        try {
+          if(file.name.match(/\.json$/i)) {
+            imported = JSON.parse(e.target.result);
+          } else if(file.name.match(/\.csv$/i)) {
+            let lines = e.target.result.split(/\r?\n/); let hdrs = lines.shift();
+            imported = lines.filter(l=>l.trim()).map(line=>{
+              let m = line.match(/("([^"]|"")*"|[^;]*)(;|$)/g) || [];
+              let vals = m.map(s=>s.replace(/^"|"$/g,'').replace(/""/g,'"').replace(/;$/,''));
+              let o = {}; ["name","street","number","zip","city","email","phone","info"].forEach((k,i)=>o[k]=vals[i]||"");
+              o.id = o.id || (crypto?.randomUUID?.() || (Date.now().toString()+Math.random()));
+              return o;
+            });
+          }
+        } catch(e){ alert("Kunne ikke importere data. Tjek filformat."); return; }
+        if(imported.length && imported[0].name && imported[0].street) {
+          // upsert alle til Supabase
+          for (const c of imported) await upsertCustomer(c);
+          customers = imported;
+          localStorage.setItem('customers', JSON.stringify(customers));
+          syncSelects(); renderCustomerList();
+          alert("Kunder importeret.");
+        } else {
+          alert("Filen indeholder ikke genkendelige kunder.");
+        }
+        evt.target.value = "";
+      };
+      reader.readAsText(file);
+    };
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      // 1) hent kunder/typer fra Supabase (med local fallback)
+      await refreshFromSupabase();
+      // 2) sæt default bestiller i selects
+      let bestillerSel = document.getElementById('bestillerSelect');
+      let defaultBestillerId = getDefaultBestillerId();
+      if(defaultBestillerId && customers.find(c=>c.id===defaultBestillerId) && bestillerSel) {
+        bestillerSel.value = defaultBestillerId;
+        let kunde = customers.find(c=>c.id===defaultBestillerId);
+        document.querySelectorAll('.afsender').forEach(sel => {
+          let sChk = sel.closest('tr').querySelector('.copyBestSender');
+          if (sChk && sChk.checked && kunde) sel.value = `${kunde.name} ${kunde.street} ${kunde.number} ${kunde.zip} ${kunde.city}`;
+        });
+      }
+      // 3) hent seneste booking state & anvend
+      await loadBookingState();
+      // 4) autosave hver 60 sek.
+      setInterval(saveBookingState, 60*1000);
+      // 5) gem når siden forlades
+      window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveBookingState(); });
+      window.addEventListener('beforeunload', (e)=>{ saveBookingState(); });
+    });
+
+    // ========= Serialisering af booking-tabellen =========
+    function collectBookingState() {
+      const rows = Array.from(document.querySelectorAll('#bookingTable tbody tr')).map(tr => {
+        const get = sel => tr.querySelector(sel);
+        return {
+          date: get('.datepicker')?.value || '',
+          time: get('.timepicker')?.value || '',
+          copyBestSender: get('.copyBestSender')?.checked || false,
+          afsender: get('.afsender')?.value || '',
+          copyBestReceiver: get('.copyBestReceiver')?.checked || false,
+          modtager: get('.modtager')?.value || '',
+          antal: get('.antal')?.value || '',
+          type: get('.typeSelect')?.value || '',
+          ldm: get('.ldm')?.value || '',
+          vaegt: get('.vægt')?.value || '',
+          afhentet: get('.afhentet')?.checked || false,
+          pris: get('.pris')?.value || '',
+          afregnet: get('.afregnet')?.checked || false
+        };
+      });
+      return { defaultBestillerId: getDefaultBestillerId(), rows };
+    }
+
+    function applyBookingState(state) {
+      if (!state || !Array.isArray(state.rows)) return;
+      const tbody = document.querySelector('#bookingTable tbody');
+      // ryd ned til én skabelonrække
+      while (tbody.rows.length > 1) tbody.deleteRow(1);
+      const tpl = tbody.rows[0];
+
+      function fillRow(tr, data) {
+        const set = (sel,val)=>{ const el = tr.querySelector(sel); if(!el) return;
+          if (el.type === 'checkbox') el.checked = !!val;
+          else el.value = (val ?? '');
+        };
+        set('.datepicker', data.date);
+        set('.timepicker', data.time);
+        set('.copyBestSender', data.copyBestSender);
+        set('.afsender', data.afsender);
+        set('.copyBestReceiver', data.copyBestReceiver);
+        set('.modtager', data.modtager);
+        set('.antal', data.antal);
+        set('.typeSelect', data.type);
+        set('.ldm', data.ldm);
+        set('.vægt', data.vaegt);
+        set('.afhentet', data.afhentet);
+        set('.pris', data.pris);
+        set('.afregnet', data.afregnet);
+        lockRow(tr, data.afhentet);
+      }
+
+      // første række = tpl
+      fillRow(tpl, state.rows[0] || {});
+      setupRow(tpl);
+
+      // ekstra rækker
+      for (let i=1;i<state.rows.length;i++){
+        const nr = tpl.cloneNode(true);
+        tbody.append(nr);
+        setupRow(nr);
+        fillRow(nr, state.rows[i]);
+      }
+
+      if (state.defaultBestillerId) {
+        setDefaultBestillerId(state.defaultBestillerId);
+        const bestillerSel = document.getElementById('bestillerSelect');
+        if (bestillerSel) bestillerSel.value = state.defaultBestillerId;
+      }
+    }
+  </script>
+</body>
+</html>
